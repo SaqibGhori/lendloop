@@ -24,6 +24,7 @@ function Admin() {
 
       <section>
         <h2 className="mb-2 font-medium">Lenders</h2>
+        {lenders === undefined && <p className="text-sm text-stone-500">Loading…</p>}
         <ul className="divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white">
           {lenders?.map((u) => (
             <li key={u._id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
@@ -46,6 +47,7 @@ function Admin() {
 
       <section>
         <h2 className="mb-2 font-medium">All listings</h2>
+        {tools === undefined && <p className="text-sm text-stone-500">Loading…</p>}
         <ul className="divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white">
           {tools?.map((t) => (
             <li key={t._id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
@@ -70,10 +72,12 @@ function Admin() {
 
       <section>
         <h2 className="mb-2 font-medium">All loans</h2>
-        {loans?.length === 0 ? (
+        {loans === undefined ? (
+          <p className="text-sm text-stone-500">Loading…</p>
+        ) : loans.length === 0 ? (
           <p className="text-sm text-stone-500">No loans yet.</p>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">{loans?.map((l) => <LoanCard key={l._id} loan={l} side="admin" />)}</ul>
+          <ul className="grid gap-3 sm:grid-cols-2">{loans.map((l) => <LoanCard key={l._id} loan={l} side="admin" />)}</ul>
         )}
       </section>
     </div>

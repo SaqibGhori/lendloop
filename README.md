@@ -4,6 +4,12 @@ A neighborhood tool-lending board. Neighbors list tools, request to borrow them 
 
 Stack: Next.js 15 (App Router, TypeScript) · Clerk (auth) · Convex (data and backend logic) · n8n (automation).
 
+![All tools: availability, category filter, Trusted Lender badge](docs/all-tools.jpg)
+
+![Admin: lenders, all listings, all loans with automation activity](docs/admin.jpg)
+
+![Incoming requests with the notifications written back by the automation](docs/requests.jpg)
+
 ## Run it locally
 
 Prerequisites: Node 20+, Docker (for n8n).
