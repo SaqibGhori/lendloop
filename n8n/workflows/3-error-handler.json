@@ -1,0 +1,71 @@
+{
+  "id": "LLerrors00000001",
+  "name": "LendLoop - error handler",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "c1",
+      "name": "When a LendLoop workflow fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "c2",
+      "name": "Describe the failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": {
+        "jsCode": "// Runs for any failed execution of the other two workflows (set as their Error Workflow).\n// The failed execution stays in n8n's Executions list; this adds a readable alert.\nconst d = $input.first().json;\nconst summary = `LendLoop automation failed: \"${d.workflow && d.workflow.name}\" at node \"${d.execution && d.execution.lastNodeExecuted}\": ${d.execution && d.execution.error && d.execution.error.message}`;\nconsole.error(summary);\nreturn [{ json: { summary, executionUrl: d.execution && d.execution.url, alertUrl: $env.LENDLOOP_ALERT_WEBHOOK_URL || '' } }];"
+      }
+    },
+    {
+      "id": "c3",
+      "name": "Alert channel configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.alertUrl }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c4",
+      "name": "Post alert (Slack/Discord webhook)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -80],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.alertUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"text\": $json.summary, \"content\": $json.summary } }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "When a LendLoop workflow fails": { "main": [[{ "node": "Describe the failure", "type": "main", "index": 0 }]] },
+    "Describe the failure": { "main": [[{ "node": "Alert channel configured?", "type": "main", "index": 0 }]] },
+    "Alert channel configured?": { "main": [[{ "node": "Post alert (Slack/Discord webhook)", "type": "main", "index": 0 }], []] }
+  }
+}

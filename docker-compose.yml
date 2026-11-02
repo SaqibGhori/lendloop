@@ -1,0 +1,26 @@
+# n8n for LendLoop. Convex and Next.js run on the host (npx convex dev / npm run dev).
+# Secrets come from .env.n8n (git-ignored), never from the workflow JSON.
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.123.0
+    ports:
+      - "5678:5678"
+    env_file: .env.n8n
+    environment:
+      # Convex's HTTP actions on the host machine.
+      CONVEX_SITE_URL: ${CONVEX_SITE_URL:-http://host.docker.internal:3211}
+      # Code nodes read the HMAC secret from the environment and use Node's crypto module.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      GENERIC_TIMEZONE: UTC
+      N8N_DIAGNOSTICS_ENABLED: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+    # Import (or refresh) the three workflows, then start n8n.
+    entrypoint: ["/bin/sh", "-c", "n8n import:workflow --separate --input=/workflows && n8n start"]
+
+volumes:
+  n8n_data:

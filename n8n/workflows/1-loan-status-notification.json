@@ -1,0 +1,133 @@
+{
+  "id": "LLnotify00000001",
+  "name": "LendLoop - loan status notification",
+  "active": true,
+  "settings": { "executionOrder": "v1", "errorWorkflow": "LLerrors00000001" },
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "Loan status webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lendloop-loan-status",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-loan-status",
+        "responseMode": "responseNode",
+        "options": { "rawBody": true }
+      }
+    },
+    {
+      "id": "a2",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": {
+        "jsCode": "// Rejects anything not signed by Convex with the shared secret, or older than 5 minutes.\nconst crypto = require('crypto');\nconst secret = $env.LENDLOOP_HMAC_SECRET;\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst raw = item.binary && item.binary.data\n  ? Buffer.from(item.binary.data.data, 'base64').toString('utf8')\n  : JSON.stringify(item.json.body);\nconst ts = String(headers['x-lendloop-timestamp'] || '');\nconst sig = String(headers['x-lendloop-signature'] || '');\nconst fresh = /^\\d+$/.test(ts) && Math.abs(Date.now() / 1000 - Number(ts)) <= 300;\nconst expected = 'sha256=' + crypto.createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex');\nconst valid = Boolean(secret) && fresh && sig.length === expected.length &&\n  crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));\nreturn [{ json: { valid, event: valid ? JSON.parse(raw) : null } }];"
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Reject (401)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 160],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"bad signature\" } }}",
+        "options": { "responseCode": 401 }
+      }
+    },
+    {
+      "id": "a5",
+      "name": "Send notification (mock)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, -100],
+      "parameters": {
+        "jsCode": "// Mock channel: the message is logged here and written back to Convex, where it shows on the loan.\n// Swap this node for Email/Slack/Discord; it only ever sees the recipient's id and display name.\nconst e = $input.first().json.event;\nconst who = e.recipient && e.recipient.name ? e.recipient.name : 'there';\nconst dates = e.startDate === e.endDate ? e.startDate : `${e.startDate} to ${e.endDate}`;\nconst text = {\n  requested: `Hi ${who}, someone asked to borrow your ${e.tool} (${dates}).`,\n  approved: `Hi ${who}, your request for the ${e.tool} (${dates}) was approved.`,\n  declined: `Hi ${who}, your request for the ${e.tool} was declined.`,\n  cancelled: `Hi ${who}, a request for your ${e.tool} was cancelled.`,\n  returned: `Hi ${who}, the ${e.tool} was marked as returned. Thanks for borrowing!`,\n}[e.status] || `Update on ${e.tool}: ${e.status}`;\nconsole.log(`[mock notification] to user ${e.recipient && e.recipient.userId}: ${text}`);\nreturn [{ json: { loanId: e.loanId, key: `notify:${e.eventId}`, message: text } }];"
+      }
+    },
+    {
+      "id": "a6",
+      "name": "Sign write-back",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -100],
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst j = $input.first().json;\nconst body = JSON.stringify({ key: j.key, loanId: j.loanId, kind: 'notification', status: 'sent', message: j.message });\nconst ts = Math.floor(Date.now() / 1000).toString();\nconst sig = 'sha256=' + crypto.createHmac('sha256', $env.LENDLOOP_HMAC_SECRET).update(`${ts}.${body}`).digest('hex');\nreturn [{ json: { body, ts, sig } }];"
+      }
+    },
+    {
+      "id": "a7",
+      "name": "Write back to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -100],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONVEX_SITE_URL }}/n8n/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-lendloop-timestamp", "value": "={{ $json.ts }}" },
+            { "name": "x-lendloop-signature", "value": "={{ $json.sig }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a8",
+      "name": "Acknowledge (200)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1320, -100],
+      "parameters": { "respondWith": "json", "responseBody": "={{ { \"ok\": true } }}", "options": {} }
+    }
+  ],
+  "connections": {
+    "Loan status webhook": { "main": [[{ "node": "Verify signature", "type": "main", "index": 0 }]] },
+    "Verify signature": { "main": [[{ "node": "Signature valid?", "type": "main", "index": 0 }]] },
+    "Signature valid?": {
+      "main": [
+        [{ "node": "Send notification (mock)", "type": "main", "index": 0 }],
+        [{ "node": "Reject (401)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send notification (mock)": { "main": [[{ "node": "Sign write-back", "type": "main", "index": 0 }]] },
+    "Sign write-back": { "main": [[{ "node": "Write back to Convex", "type": "main", "index": 0 }]] },
+    "Write back to Convex": { "main": [[{ "node": "Acknowledge (200)", "type": "main", "index": 0 }]] }
+  }
+}
