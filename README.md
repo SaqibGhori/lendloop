@@ -30,6 +30,14 @@ npx convex dev            # first run creates a deployment and writes CONVEX_* t
 3. **n8n.** Copy `.env.n8n.example` to `.env.n8n` and set the same `LENDLOOP_HMAC_SECRET`. Then `docker compose up`. The container imports the three workflows from `n8n/workflows/` on start; open http://localhost:5678, create the owner account, and make sure "loan status notification" and "daily overdue reminders" are active.
 4. `npm run dev` and open http://localhost:3000.
 
+**n8n without Docker** (how it was tested on Windows without WSL): install `n8n@1.123` with npm in its own folder, add `"overrides": { "@langchain/langgraph-checkpoint": "1.0.0" }` to that folder's `package.json` (the npm release otherwise resolves an incompatible version), then:
+```bash
+export N8N_BLOCK_ENV_ACCESS_IN_NODE=false NODE_FUNCTION_ALLOW_BUILTIN=crypto LENDLOOP_HMAC_SECRET=... CONVEX_SITE_URL=http://127.0.0.1:3211
+npx n8n import:workflow --separate --input=path/to/lendloop/n8n/workflows
+npx n8n start
+```
+Verified end to end against the real n8n: a forged webhook gets 401, a loan request produces the notification and its write-back on the loan, and running the overdue workflow twice writes one reminder (`duplicate: true` on the second run).
+
 ## Architecture
 
 ```
